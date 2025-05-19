@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>North Carolina Parcels Dashboard</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- ArcGIS JavaScript API -->
+  <link rel="stylesheet" href="https://js.arcgis.com/4.28/esri/themes/light/main.css">
+  <script src="https://js.arcgis.com/4.28/"></script>
+  <style>
+    html, body, #viewDiv {
+      padding: 0;
+      margin: 0;
+      height: 100%;
+      width: 100%;
+    }
+    #viewDiv {
+      height: 60vh;
+    }
+    #filter-sidebar {
+      transition: all 0.3s ease-in-out;
+    }
+    .table-container {
+      max-height: 30vh;
+      overflow-y: auto;
+    }
+    th, td {
+      padding: 0.75rem;
+      text-align: left;
+    }
+    tbody tr:hover {
+      background-color: #f1f5f9;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 font-sans">
+  <div class="flex h-screen">
+    <!-- Sidebar with Filters -->
+    <div id="filter-sidebar" class="w-64 bg-white shadow-lg p-6">
+      <h2 class="text-xl font-semibold text-gray-800 mb-4">Filters</h2>
+      <div class="mb-4">
+        <label for="parusecode" class="block text-sm font-medium text-gray-700">Tax Parcel Use Code</label>
+        <input type="text" id="parusecode" placeholder="Enter use code (e.g., RES)" class="mt-1 w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <button id="apply-filter" class="w-full bg-blue-600 text-white p-2 rounded-md hover:bg-blue-700 transition">Apply Filter</button>
+      <button id="clear-filter" class="w-full bg-gray-300 text-gray-800 p-2 rounded-md mt-2 hover:bg-gray-400 transition">Clear Filter</button>
+    </div>
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col">
+      <!-- Map -->
+      <div id="viewDiv" class="shadow-lg"></div>
+      <!-- Table -->
+      <div class="table-container bg-white m-4 rounded-lg shadow-lg">
+        <table class="w-full table-auto">
+          <thead class="bg-gray-200 sticky top-0">
+            <tr>
+              <th class="text-sm font-semibold text-gray-700">Parcel ID</th>
+              <th class="text-sm font-semibold text-gray-700">Owner Name</th>
+              <th class="text-sm font-semibold text-gray-700">Use Code</th>
+              <th class="text-sm font-semibold text-gray-700">Acreage</th>
+              <th class="text-sm font-semibold text-gray-700">Assessed Value</th>
+            </tr>
+          </thead>
+          <tbody id="parcel-table"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    require([
+      "esri/config",
+      "esri/Map",
+      "esri/views/MapView",
+      "esri/layers/FeatureLayer",
+      "esri/widgets/Legend",
+      "esri/rest/support/Query"
+    ], function(esriConfig, Map, MapView, FeatureLayer, Legend, Query) {
+      // ArcGIS API Key (replace with your own if needed)
+      esriConfig.apiKey = "YOUR_ARCGIS_API_KEY"; // Optional: Use your ArcGIS API key for authentication
+
+      // Initialize Map
+      const map = new Map({
+        basemap: "arcgis-topographic"
+      });
+
+      // Initialize MapView
+      const view = new MapView({
+        container: "viewDiv",
+        map: map,
+        center: [-79.0193, 35.7596], // Center of North Carolina
+        zoom: 7
+      });
+
+      // Feature Layer for NC Parcels
+      const parcelLayer = new FeatureLayer({
+        url: "https://services.nconemap.gov/secure/rest/services/NC1Map_Parcels/FeatureServer/1",
+        outFields: ["PARCELID", "OWNNAME", "PARUSECODE", "RECAREANO", "TOTVAL"],
+        popupTemplate: {
+          title: "Parcel {PARCELID}",
+          content: [
+            { type: "fields", fieldInfos: [
+              { fieldName: "OWNNAME", label: "Owner Name" },
+              { fieldName: "PARUSECODE", label: "Use Code" },
+              { fieldName: "RECAREANO", label: "Acreage" },
+              { fieldName: "TOTVAL", label: "Assessed Value" }
+            ]}
+          ]
+        }
+      });
+
+      map.add(parcelLayer);
+
+      // Add Legend
+      const legend = new Legend({
+        view: view,
+        layerInfos: [{ layer: parcelLayer, title: "NC Parcels" }]
+      });
+      view.ui.add(legend, "bottom-right");
+
+      // Query parcels and update table
+      function queryParcels(whereClause = "1=1") {
+        const query = new Query({
+          where: whereClause,
+          outFields: ["PARCELID", "OWNNAME", "PARUSECODE", "RECAREANO", "TOTVAL"],
+          returnGeometry: false,
+          num: 100 // Limit to 100 results for performance
+        });
+
+        parcelLayer.queryFeatures(query).then(function(results) {
+          const tableBody = document.getElementById("parcel-table");
+          tableBody.innerHTML = ""; // Clear table
+
+          results.features.forEach(function(feature) {
+            const attr = feature.attributes;
+            const row = `
+              <tr>
+                <td>${attr.PARCELID || "N/A"}</td>
+                <td>${attr.OWNNAME || "N/A"}</td>
+                <td>${attr.PARUSECODE || "N/A"}</td>
+                <td>${attr.RECAREANO ? attr.RECAREANO.toFixed(2) : "N/A"}</td>
+                <td>${attr.TOTVAL ? "$" + attr.TOTVAL.toLocaleString() : "N/A"}</td>
+              </tr>`;
+            tableBody.innerHTML += row;
+          });
+        }).catch(function(error) {
+          console.error("Query failed: ", error);
+        });
+
+        // Update map layer definition expression
+        parcelLayer.definitionExpression = whereClause;
+      }
+
+      // Initial query
+      queryParcels();
+
+      // Filter button event
+      document.getElementById("apply-filter").addEventListener("click", function() {
+        const parusecode = document.getElementById("parusecode").value.trim();
+        const whereClause = parusecode ? `PARUSECODE = '${parusecode}'` : "1=1";
+        queryParcels(whereClause);
+      });
+
+      // Clear filter button event
+      document.getElementById("clear-filter").addEventListener("click", function() {
+        document.getElementById("parusecode").value = "";
+        queryParcels();
+      });
+    });
+  </script>
+</body>
+</html>
