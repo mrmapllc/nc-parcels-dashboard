@@ -71,16 +71,11 @@
 
   <script>
     require([
-      "esri/config",
       "esri/Map",
       "esri/views/MapView",
       "esri/layers/FeatureLayer",
-      "esri/widgets/Legend",
-      "esri/rest/support/Query"
-    ], function(esriConfig, Map, MapView, FeatureLayer, Legend, Query) {
-      // ArcGIS API Key (replace with your own if needed)
-      esriConfig.apiKey = "YOUR_ARCGIS_API_KEY"; // Optional: Use your ArcGIS API key for authentication
-
+ "esri/rest/support/Query"
+    ], function(Map, MapView, FeatureLayer, Query) {
       // Initialize Map
       const map = new Map({
         basemap: "arcgis-topographic"
@@ -112,13 +107,6 @@
       });
 
       map.add(parcelLayer);
-
-      // Add Legend
-      const legend = new Legend({
-        view: view,
-        layerInfos: [{ layer: parcelLayer, title: "NC Parcels" }]
-      });
-      view.ui.add(legend, "bottom-right");
 
       // Query parcels and update table
       function queryParcels(whereClause = "1=1") {
